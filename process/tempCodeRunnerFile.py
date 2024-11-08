@@ -1,1 +1,0 @@
-print(PIECES_PLACEMENT)
