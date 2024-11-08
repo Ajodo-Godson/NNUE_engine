@@ -1,0 +1,1 @@
+print(PIECES_PLACEMENT)
