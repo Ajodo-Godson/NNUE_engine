@@ -7,7 +7,6 @@ import random
 from torch.utils.data import DataLoader
 import os
 
-# Import custom modules
 from utils.board_repr import board_to_input_tensor
 from utils.move_mapping import move_to_index
 from utils.constants import INPUT_SIZE, HIDDEN_SIZE, ACTION_SPACE_SIZE
