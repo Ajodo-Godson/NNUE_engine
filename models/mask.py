@@ -7,6 +7,6 @@ class MaskLayer(nn.Module):
         super(MaskLayer, self).__init__()
 
     def forward(self, x, mask):
-        neg_inf = -1e9  # or use -float('inf') if supported
+        neg_inf = -1e9
         masked_x = torch.where(mask == 1, x, neg_inf)
         return masked_x

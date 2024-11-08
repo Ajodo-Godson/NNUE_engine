@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mask import MaskLayer
+from models.mask import MaskLayer
 from utils.constants import ACTION_SPACE_SIZE
 
 
