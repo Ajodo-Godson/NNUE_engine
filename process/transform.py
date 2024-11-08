@@ -4,6 +4,7 @@ from collections import defaultdict
 board = chess.Board()
 
 PIECES_PLACEMENT = defaultdict(list)
+print(board.occupied)
 
 
 def convert_bit_to_board(bit):
@@ -24,3 +25,6 @@ for squares in chess.PIECE_NAMES:
         piece_att = getattr(board, squares + "s")
 
         PIECES_PLACEMENT[squares] = convert_bit_to_board(bin(piece_att)[2:].zfill(64))
+PIECES_PLACEMENT["empty"] = convert_bit_to_board(bin(board.occupied)[2:].zfill(64))
+
+print(PIECES_PLACEMENT)
