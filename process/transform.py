@@ -4,7 +4,7 @@ from collections import defaultdict
 board = chess.Board()
 
 PIECES_PLACEMENT = defaultdict(list)
-print(board.occupied)
+# print(board.occupied)
 
 
 def convert_bit_to_board(bit):
