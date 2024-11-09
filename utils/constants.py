@@ -1,5 +1,7 @@
 import chess
 
+BOARD_INPUT_SIZE = (1, 8, 8)  # Board tensor shape
+METADATA_SIZE = 7  # Number of metadata features
 NUM_SQUARES = 64
 PROMOTION_PIECES = [None, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]
 NUM_PROMOTIONS = len(PROMOTION_PIECES)
