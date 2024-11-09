@@ -74,7 +74,6 @@ for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
     print(
         f"Batch {batch_idx}, inputs shape: {inputs.shape}, metadata shape: {metadata.shape}, targets shape: {targets.shape}"
     )
-    # Proceed with the rest of your training loop...
 
     # ------------------------
     # Model Training Section
