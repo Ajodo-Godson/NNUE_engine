@@ -3,10 +3,8 @@ import chess
 
 
 def board_to_input_tensor(board):
-    # Initialize a tensor of zeros
-    tensor = torch.zeros(16, 8, 8, dtype=torch.float32)  # 16 channels, 8x8 board
+    tensor = torch.zeros(16, 8, 8, dtype=torch.float32)
 
-    # Mapping from piece type to plane index
     piece_type_to_plane = {
         chess.PAWN: 0,
         chess.KNIGHT: 1,
@@ -16,25 +14,18 @@ def board_to_input_tensor(board):
         chess.KING: 5,
     }
 
-    # Place pieces on the tensor
-    for piece_type in piece_type_to_plane.keys():
+    # Map white and black pieces
+    for piece_type, plane in piece_type_to_plane.items():
         # White pieces
-        white_bitboard = board.pieces(piece_type, chess.WHITE)
-        white_indices = white_bitboard
-        white_plane = piece_type_to_plane[piece_type]
-        for square in chess.SquareSet(white_indices):
-            row = 7 - chess.square_rank(square)  # Adjust for correct orientation
-            col = chess.square_file(square)
-            tensor[white_plane, row, col] = 1.0
-
-        # Black pieces
-        black_bitboard = board.pieces(piece_type, chess.BLACK)
-        black_indices = black_bitboard
-        black_plane = piece_type_to_plane[piece_type] + 6  # Offset for black pieces
-        for square in chess.SquareSet(black_indices):
+        for square in board.pieces(piece_type, chess.WHITE):
             row = 7 - chess.square_rank(square)
             col = chess.square_file(square)
-            tensor[black_plane, row, col] = 1.0
+            tensor[plane, row, col] = 1.0
+        # Black pieces
+        for square in board.pieces(piece_type, chess.BLACK):
+            row = 7 - chess.square_rank(square)
+            col = chess.square_file(square)
+            tensor[plane + 6, row, col] = 1.0
 
     # Empty squares
     occupied = board.occupied
@@ -49,8 +40,8 @@ def board_to_input_tensor(board):
     tensor[14].fill_(float(board.has_queenside_castling_rights(board.turn)))
 
     # Side to move
-    tensor[15].fill_(float(board.turn))  # 1.0 for White, 0.0 for Black
+    tensor[15].fill_(float(board.turn))
 
+    # Flatten the tensor
     tensor = tensor.view(-1)
-
     return tensor
