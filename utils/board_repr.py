@@ -1,47 +1,33 @@
 import torch
+import numpy as np
 import chess
 
 
 def board_to_input_tensor(board):
-    tensor = torch.zeros(16, 8, 8, dtype=torch.float32)
-
-    piece_type_to_plane = {
-        chess.PAWN: 0,
-        chess.KNIGHT: 1,
-        chess.BISHOP: 2,
-        chess.ROOK: 3,
-        chess.QUEEN: 4,
-        chess.KING: 5,
+    piece_to_int = {
+        "P": 1,
+        "N": 2,
+        "B": 3,
+        "R": 4,
+        "Q": 5,
+        "K": 6,
+        "p": -1,
+        "n": -2,
+        "b": -3,
+        "r": -4,
+        "q": -5,
+        "k": -6,
+        None: 0,
     }
-
-    # Map white and black pieces
-    for piece_type, plane in piece_type_to_plane.items():
-        # White pieces
-        for square in board.pieces(piece_type, chess.WHITE):
-            row = 7 - chess.square_rank(square)
-            col = chess.square_file(square)
-            tensor[plane, row, col] = 1.0
-        # Black pieces
-        for square in board.pieces(piece_type, chess.BLACK):
-            row = 7 - chess.square_rank(square)
-            col = chess.square_file(square)
-            tensor[plane + 6, row, col] = 1.0
-
-    # Empty squares
-    occupied = board.occupied
-    empty_squares = ~occupied & chess.BB_ALL
-    for square in chess.SquareSet(empty_squares):
-        row = 7 - chess.square_rank(square)
-        col = chess.square_file(square)
-        tensor[12, row, col] = 1.0
-
-    # Castling rights
-    tensor[13].fill_(float(board.has_kingside_castling_rights(board.turn)))
-    tensor[14].fill_(float(board.has_queenside_castling_rights(board.turn)))
-
-    # Side to move
-    tensor[15].fill_(float(board.turn))
-
-    # Flatten the tensor
-    tensor = tensor.view(-1)
-    return tensor
+    board_tensor = np.zeros((8, 8), dtype=np.int8)
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        row = 7 - (square // 8)
+        col = square % 8
+        piece_symbol = piece.symbol() if piece else None
+        board_tensor[row, col] = piece_to_int.get(piece_symbol, 0)
+    # Convert to PyTorch tensor
+    board_tensor = torch.tensor(board_tensor, dtype=torch.float32)
+    # Add channel dimension for convolutional layers (shape: [1, 8, 8])
+    board_tensor = board_tensor.unsqueeze(0)
+    return board_tensor

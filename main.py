@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     if os.path.exists(PROCESSED_DATA_PATH):
         print("Processed dataset found. Loading...")
-        data = torch.load(PROCESSED_DATA_PATH)
+        data = torch.load(PROCESSED_DATA_PATH, weights_only=True)
         train_data_list = data["train"]
         val_data_list = data["val"]
     else:
@@ -63,6 +63,18 @@ if __name__ == "__main__":
     # Create DataLoaders
     train_loader = DataLoader(train_data_list, batch_size=BATCH_SIZE, shuffle=True)
     valid_loader = DataLoader(val_data_list, batch_size=BATCH_SIZE, shuffle=False)
+
+    # After loading the processed data
+    print(f"First training sample input_tensor shape: {train_data_list[0][0].shape}")
+    print(f"First training sample metadata_tensor shape: {train_data_list[0][1].shape}")
+    print(f"First training sample target_value: {train_data_list[0][2]}")
+
+# In the training loop
+for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
+    print(
+        f"Batch {batch_idx}, inputs shape: {inputs.shape}, metadata shape: {metadata.shape}, targets shape: {targets.shape}"
+    )
+    # Proceed with the rest of your training loop...
 
     # ------------------------
     # Model Training Section
