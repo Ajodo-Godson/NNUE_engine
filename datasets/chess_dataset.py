@@ -93,7 +93,7 @@ class ChessIterableDataset(data.IterableDataset):
             halfmove_clock = 0
         metadata.append(halfmove_clock / 100.0)
 
-        # Fullmove number (optional)
+        # Fullmove number
         try:
             fullmove_number = int(parts[5])
         except (IndexError, ValueError):
