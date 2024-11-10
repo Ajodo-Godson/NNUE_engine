@@ -1,80 +1,103 @@
+# main.py
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
+import logging
+import h5py
 
 # Import custom modules
 from utils.board_repr import board_to_input_tensor
-from utils.constants import INPUT_SIZE, HIDDEN_SIZE
 from models.neural import ChessNet
 from datasets.chess_dataset import ChessIterableDataset
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # Change to DEBUG for more detailed logs
+    format="%(asctime)s %(levelname)s:%(message)s",
+    handlers=[logging.FileHandler("training.log"), logging.StreamHandler()],
+)
+logger = logging.getLogger(__name__)
+
 # Set the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logger.info(f"Using device: {device}")
 
 # Paths and parameters
 ZIP_PATH = "data/datasets.zip"
-# CSV_FILENAME = "datasets/tactic_evals.csv"
 CSV_FILENAME = "datasets/chessData.csv"
+H5_PATH = "data/chess_data.h5"
 MODEL_SAVE_PATH = "saved_models/chess_model.pth"
-PROCESSED_DATA_PATH = "processed_data_regression.pth"
 BATCH_SIZE = 32
-NUM_EPOCHS = 10
+NUM_EPOCHS = 3
 LEARNING_RATE = 0.0001  # Reduced learning rate
-METADATA_SIZE = 7  # Number of metadata features
+METADATA_SIZE = 8  # Number of metadata features
+NUM_WORKERS = 4  # Adjust based on your CPU cores
 
 # Create directories if they don't exist
 os.makedirs("saved_models", exist_ok=True)
 
 if __name__ == "__main__":
     # ------------------------
+    # Data Preprocessing Section
+    # ------------------------
+
+    # Check if HDF5 file exists
+    if not os.path.exists(H5_PATH):
+        logger.info("HDF5 file not found. Creating HDF5 file...")
+        dataset = ChessIterableDataset(
+            zip_path=ZIP_PATH,
+            csv_filename=CSV_FILENAME,
+            val_split=0.2,
+            split="train",  # Split handled within save_to_hdf5
+            metadata_size=METADATA_SIZE,
+        )
+        dataset.save_to_hdf5(H5_PATH)  # Remove max_samples or set appropriately
+        logger.info("HDF5 file created successfully.")
+
+    # ------------------------
     # Data Loading Section
     # ------------------------
 
-    print("Loading dataset...")
+    logger.info("Initializing datasets...")
 
-    if os.path.exists(PROCESSED_DATA_PATH):
-        print("Processed dataset found. Loading...")
-        data = torch.load(PROCESSED_DATA_PATH, weights_only=True)
-        train_data_list = data["train"]
-        val_data_list = data["val"]
-    else:
-        print("Processed dataset not found. Generating...")
-        dataset = ChessIterableDataset(ZIP_PATH, CSV_FILENAME, val_split=0.2)
-        train_data_list = []
-        val_data_list = []
+    # Create dataset instances for training and validation from HDF5
+    train_dataset = ChessIterableDataset(
+        zip_path=ZIP_PATH,
+        csv_filename=CSV_FILENAME,
+        val_split=0.2,
+        split="train",
+        h5_path=H5_PATH,
+        metadata_size=METADATA_SIZE,  # Pass metadata_size
+    )
 
-        for i, (input_tensor, metadata_tensor, target_value, split) in enumerate(
-            dataset
-        ):
-            if split == "train":
-                train_data_list.append((input_tensor, metadata_tensor, target_value))
-            else:
-                val_data_list.append((input_tensor, metadata_tensor, target_value))
-            if i % 1000 == 0:
-                print(f"Processed {i} samples from the dataset...")
-
-        # Save the processed data
-        torch.save(
-            {"train": train_data_list, "val": val_data_list}, PROCESSED_DATA_PATH
-        )
-        print("Processed dataset saved.")
+    val_dataset = ChessIterableDataset(
+        zip_path=ZIP_PATH,
+        csv_filename=CSV_FILENAME,
+        val_split=0.2,
+        split="val",
+        h5_path=H5_PATH,
+        metadata_size=METADATA_SIZE,  # Pass metadata_size
+    )
 
     # Create DataLoaders
-    train_loader = DataLoader(train_data_list, batch_size=BATCH_SIZE, shuffle=True)
-    valid_loader = DataLoader(val_data_list, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,  # Shuffle not needed for IterableDataset
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
 
-    # After loading the processed data
-    print(f"First training sample input_tensor shape: {train_data_list[0][0].shape}")
-    print(f"First training sample metadata_tensor shape: {train_data_list[0][1].shape}")
-    print(f"First training sample target_value: {train_data_list[0][2]}")
-
-    # In the training loop
-    for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
-        print(
-            f"Batch {batch_idx}, inputs shape: {inputs.shape}, metadata shape: {metadata.shape}, targets shape: {targets.shape}"
-        )
+    valid_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
 
     # ------------------------
     # Model Training Section
@@ -84,72 +107,111 @@ if __name__ == "__main__":
     model = ChessNet(metadata_size=METADATA_SIZE).to(device)
     loss_fn = nn.MSELoss()  # Or nn.L1Loss() for MAE
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
 
-    # Training loop
-    print("Starting training...")
+    # Initialize GradScaler only if CUDA is available
+    use_amp = device.type == "cuda"
+    if use_amp:
+        scaler = torch.cuda.amp.GradScaler()
+        logger.info("Using Automatic Mixed Precision (AMP).")
+    else:
+        scaler = None
+        logger.info("AMP not enabled. Training on CPU.")
+
+    # Initialize best validation loss
+    best_val_loss = float("inf")
+
+    logger.info("Starting training...")
     for epoch in range(NUM_EPOCHS):
         model.train()
-        total_loss = 0
+        total_loss = 0.0
         batch_count = 0
+
         for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
             inputs = inputs.to(device)  # Shape: [batch_size, 1, 8, 8]
-            metadata = metadata.to(device)  # Shape: [batch_size, METADATA_SIZE]
-            targets = targets.to(device).float()
+            metadata = metadata.to(device)  # Shape: [batch_size, 7]
+            targets = targets.to(device).float()  # Shape: [batch_size]
 
-            # Forward pass
-            outputs = model(inputs, metadata)
+            optimizer.zero_grad()
 
-            # Compute loss
-            loss = loss_fn(outputs, targets)
+            if use_amp:
+                with torch.cuda.amp.autocast():
+                    outputs = model(inputs, metadata).squeeze()  # Shape: [batch_size]
+                    loss = loss_fn(outputs, targets)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                outputs = model(inputs, metadata).squeeze()  # Shape: [batch_size]
+                loss = loss_fn(outputs, targets)
+                loss.backward()
+                optimizer.step()
+
             total_loss += loss.item()
             batch_count += 1
 
-            # Backward pass and optimization
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
             # Logging
-            if batch_idx % 100 == 0:
-                print(
-                    f"Epoch [{epoch+1}/{NUM_EPOCHS}], Batch [{batch_idx+1}/{len(train_loader)}], "
-                    f"Loss: {loss.item():.6f}"
+            if (batch_idx + 1) % 100 == 0:
+                logger.info(
+                    f"Epoch [{epoch+1}/{NUM_EPOCHS}], Batch [{batch_idx+1}], Loss: {loss.item():.6f}"
                 )
 
+        # Adjust learning rate
+        scheduler.step()
+
         avg_loss = total_loss / batch_count
-        print(f"Epoch [{epoch+1}/{NUM_EPOCHS}], Training Loss: {avg_loss:.6f}")
+        logger.info(
+            f"Epoch [{epoch+1}/{NUM_EPOCHS}], Average Training Loss: {avg_loss:.6f}"
+        )
 
         # ------------------------
         # Validation Section
         # ------------------------
 
         model.eval()
-        val_loss = 0
+        val_loss = 0.0
         total_samples = 0
-        total_mae = 0
+        total_mae = 0.0
 
         with torch.no_grad():
             for batch_idx, (inputs, metadata, targets) in enumerate(valid_loader):
                 inputs = inputs.to(device)
                 metadata = metadata.to(device)
                 targets = targets.to(device).float()
-                outputs = model(inputs, metadata)
 
-                loss = loss_fn(outputs, targets)
+                if use_amp:
+                    with torch.cuda.amp.autocast():
+                        outputs = model(inputs, metadata).squeeze()
+                        loss = loss_fn(outputs, targets)
+                else:
+                    outputs = model(inputs, metadata).squeeze()
+                    loss = loss_fn(outputs, targets)
+
                 val_loss += loss.item()
-                total_samples += targets.size(0)
-                total_mae += torch.sum(torch.abs(outputs - targets)).item()
 
-                if batch_idx % 100 == 0:
-                    print(
-                        f"Validation Batch [{batch_idx+1}/{len(valid_loader)}], "
-                        f"Batch Loss: {loss.item():.6f}"
+                # Calculate MAE
+                mae = torch.abs(outputs - targets).sum().item()
+                total_mae += mae
+
+                total_samples += targets.size(0)
+
+                if (batch_idx + 1) % 100 == 0:
+                    logger.info(
+                        f"Validation Batch [{batch_idx+1}], Loss: {loss.item():.6f}"
                     )
 
-        avg_val_loss = val_loss / len(valid_loader)
+        avg_val_loss = val_loss / (batch_idx + 1)
         avg_mae = total_mae / total_samples
-        print(f"Validation Loss: {avg_val_loss:.6f}, MAE: {avg_mae:.6f}")
+        logger.info(
+            f"Epoch [{epoch+1}/{NUM_EPOCHS}], Validation Loss: {avg_val_loss:.6f}, MAE: {avg_mae:.6f}"
+        )
 
-    # Save the model
+        # Save the best model based on validation loss
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), MODEL_SAVE_PATH)
+            logger.info(f"Best model saved with Validation Loss: {best_val_loss:.6f}")
+
+    # Save the final model if not already saved
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    print(f"Model saved to '{MODEL_SAVE_PATH}'.")
+    logger.info(f"Final model saved to '{MODEL_SAVE_PATH}'.")
