@@ -15,7 +15,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Paths and parameters
 ZIP_PATH = "data/datasets.zip"
-CSV_FILENAME = "datasets/tactic_evals.csv"
+# CSV_FILENAME = "datasets/tactic_evals.csv"
+CSV_FILENAME = "datasets/chessData.csv"
 MODEL_SAVE_PATH = "saved_models/chess_model.pth"
 PROCESSED_DATA_PATH = "processed_data_regression.pth"
 BATCH_SIZE = 32
@@ -69,11 +70,11 @@ if __name__ == "__main__":
     print(f"First training sample metadata_tensor shape: {train_data_list[0][1].shape}")
     print(f"First training sample target_value: {train_data_list[0][2]}")
 
-# In the training loop
-for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
-    print(
-        f"Batch {batch_idx}, inputs shape: {inputs.shape}, metadata shape: {metadata.shape}, targets shape: {targets.shape}"
-    )
+    # In the training loop
+    for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
+        print(
+            f"Batch {batch_idx}, inputs shape: {inputs.shape}, metadata shape: {metadata.shape}, targets shape: {targets.shape}"
+        )
 
     # ------------------------
     # Model Training Section
