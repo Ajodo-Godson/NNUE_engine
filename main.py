@@ -4,7 +4,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
 import logging
-import h5py
 
 # Import custom modules
 from utils.board_repr import board_to_input_tensor
@@ -13,7 +12,7 @@ from datasets.chess_dataset import ChessIterableDataset
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,  # Change to DEBUG for more detailed logs
+    level=logging.INFO, =
     format="%(asctime)s %(levelname)s:%(message)s",
     handlers=[logging.FileHandler("training.log"), logging.StreamHandler()],
 )
@@ -29,10 +28,10 @@ CSV_FILENAME = "datasets/chessData.csv"
 H5_PATH = "data/chess_data.h5"
 MODEL_SAVE_PATH = "saved_models/chess_model.pth"
 BATCH_SIZE = 32
-NUM_EPOCHS = 3
+NUM_EPOCHS = 3  # Reduced for testing
 LEARNING_RATE = 0.0001  # Reduced learning rate
-METADATA_SIZE = 8  # Number of metadata features
-NUM_WORKERS = 4  # Adjust based on your CPU cores
+METADATA_SIZE = 8  # Updated from 7 to 8
+NUM_WORKERS = 4  
 
 # Create directories if they don't exist
 os.makedirs("saved_models", exist_ok=True)
@@ -50,9 +49,10 @@ if __name__ == "__main__":
             csv_filename=CSV_FILENAME,
             val_split=0.2,
             split="train",  # Split handled within save_to_hdf5
-            metadata_size=METADATA_SIZE,
+            h5_path=H5_PATH,
+            metadata_size=METADATA_SIZE,  # Pass updated metadata_size
         )
-        dataset.save_to_hdf5(H5_PATH)  # Remove max_samples or set appropriately
+        dataset.save_to_hdf5(H5_PATH)  # Remove max_samples
         logger.info("HDF5 file created successfully.")
 
     # ------------------------
@@ -68,7 +68,7 @@ if __name__ == "__main__":
         val_split=0.2,
         split="train",
         h5_path=H5_PATH,
-        metadata_size=METADATA_SIZE,  # Pass metadata_size
+        metadata_size=METADATA_SIZE,  # Pass updated metadata_size
     )
 
     val_dataset = ChessIterableDataset(
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         val_split=0.2,
         split="val",
         h5_path=H5_PATH,
-        metadata_size=METADATA_SIZE,  # Pass metadata_size
+        metadata_size=METADATA_SIZE,  # Pass updated metadata_size
     )
 
     # Create DataLoaders
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,  # Shuffle not needed for IterableDataset
-        num_workers=NUM_WORKERS,
+        num_workers=NUM_WORKERS,  # Set to 4
         pin_memory=True,
     )
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         val_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=NUM_WORKERS,
+        num_workers=NUM_WORKERS,  # Set to 4
         pin_memory=True,
     )
 
@@ -125,9 +125,10 @@ if __name__ == "__main__":
         total_loss = 0.0
         batch_count = 0
 
-        for batch_idx, (inputs, metadata, targets) in enumerate(train_loader):
+        # Reset batch_idx for each epoch by starting enumerate at 1
+        for batch_idx, (inputs, metadata, targets) in enumerate(train_loader, 1):
             inputs = inputs.to(device)  # Shape: [batch_size, 1, 8, 8]
-            metadata = metadata.to(device)  # Shape: [batch_size, 7]
+            metadata = metadata.to(device)  # Shape: [batch_size, 8]
             targets = targets.to(device).float()  # Shape: [batch_size]
 
             optimizer.zero_grad()
@@ -149,9 +150,9 @@ if __name__ == "__main__":
             batch_count += 1
 
             # Logging
-            if (batch_idx + 1) % 100 == 0:
+            if batch_idx % 100 == 0:
                 logger.info(
-                    f"Epoch [{epoch+1}/{NUM_EPOCHS}], Batch [{batch_idx+1}], Loss: {loss.item():.6f}"
+                    f"Epoch [{epoch+1}/{NUM_EPOCHS}], Batch [{batch_idx}], Loss: {loss.item():.6f}"
                 )
 
         # Adjust learning rate
@@ -172,7 +173,7 @@ if __name__ == "__main__":
         total_mae = 0.0
 
         with torch.no_grad():
-            for batch_idx, (inputs, metadata, targets) in enumerate(valid_loader):
+            for batch_idx, (inputs, metadata, targets) in enumerate(valid_loader, 1):
                 inputs = inputs.to(device)
                 metadata = metadata.to(device)
                 targets = targets.to(device).float()
@@ -193,12 +194,12 @@ if __name__ == "__main__":
 
                 total_samples += targets.size(0)
 
-                if (batch_idx + 1) % 100 == 0:
+                if batch_idx % 100 == 0:
                     logger.info(
-                        f"Validation Batch [{batch_idx+1}], Loss: {loss.item():.6f}"
+                        f"Validation Batch [{batch_idx}], Loss: {loss.item():.6f}"
                     )
 
-        avg_val_loss = val_loss / (batch_idx + 1)
+        avg_val_loss = val_loss / batch_idx
         avg_mae = total_mae / total_samples
         logger.info(
             f"Epoch [{epoch+1}/{NUM_EPOCHS}], Validation Loss: {avg_val_loss:.6f}, MAE: {avg_mae:.6f}"

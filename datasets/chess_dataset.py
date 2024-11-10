@@ -7,6 +7,7 @@ import logging
 import hashlib
 import h5py
 from utils.board_repr import board_to_input_tensor
+from torch.utils.data import get_worker_info
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -108,6 +109,16 @@ class ChessIterableDataset(data.IterableDataset):
         return int(hashlib.md5(s.encode("utf-8")).hexdigest(), 16)
 
     def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None:
+            # Single-worker scenario
+            worker_id = 0
+            num_workers = 1
+        else:
+            # Multi-worker scenario
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+
         if self.h5_path:
             # Open the HDF5 file within __iter__ so each worker gets its own file handle
             with h5py.File(self.h5_path, "r") as h5_file:
@@ -118,7 +129,16 @@ class ChessIterableDataset(data.IterableDataset):
                 dataset = h5_file[self.split]
                 length = dataset["inputs"].shape[0]
 
-                for i in range(length):
+                # Calculate the range of data each worker should process
+                per_worker = length // num_workers
+                start = worker_id * per_worker
+                end = start + per_worker if worker_id != num_workers - 1 else length
+
+                logger.info(
+                    f"Worker {worker_id} processing samples {start} to {end} out of {length}."
+                )
+
+                for i in range(start, end):
                     input_tensor = torch.tensor(
                         dataset["inputs"][i], dtype=torch.float32
                     )
@@ -130,7 +150,7 @@ class ChessIterableDataset(data.IterableDataset):
                     )
                     yield input_tensor, metadata_tensor, target_value
         else:
-            # Streaming from CSV
+            # Streaming from CSV with partitioning
             with zipfile.ZipFile(self.zip_path) as z:
                 with z.open(self.csv_filename) as f:
                     for chunk in pd.read_csv(
