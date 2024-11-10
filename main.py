@@ -12,7 +12,7 @@ from datasets.chess_dataset import ChessIterableDataset
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, =
+    level=logging.INFO,  # Change to DEBUG for more detailed logs
     format="%(asctime)s %(levelname)s:%(message)s",
     handlers=[logging.FileHandler("training.log"), logging.StreamHandler()],
 )
@@ -28,10 +28,10 @@ CSV_FILENAME = "datasets/chessData.csv"
 H5_PATH = "data/chess_data.h5"
 MODEL_SAVE_PATH = "saved_models/chess_model.pth"
 BATCH_SIZE = 32
-NUM_EPOCHS = 3  # Reduced for testing
-LEARNING_RATE = 0.0001  # Reduced learning rate
+NUM_EPOCHS = 3  # Adjust as needed
+LEARNING_RATE = 0.0001  # Adjust as needed
 METADATA_SIZE = 8  # Updated from 7 to 8
-NUM_WORKERS = 4  
+NUM_WORKERS = 4  # As per your case
 
 # Create directories if they don't exist
 os.makedirs("saved_models", exist_ok=True)
@@ -52,7 +52,7 @@ if __name__ == "__main__":
             h5_path=H5_PATH,
             metadata_size=METADATA_SIZE,  # Pass updated metadata_size
         )
-        dataset.save_to_hdf5(H5_PATH)  # Remove max_samples
+        dataset.save_to_hdf5(H5_PATH)  # Remove max_samples or set appropriately
         logger.info("HDF5 file created successfully.")
 
     # ------------------------

@@ -207,6 +207,11 @@ class ChessIterableDataset(data.IterableDataset):
                             # Parse evaluation to get target value
                             target_value = self.parse_evaluation(eval_str)
 
+                            # Determine if the current sample should be processed by this worker
+                            # Simple round-robin partitioning based on index
+                            if (idx % num_workers) != worker_id:
+                                continue
+
                             # Yield data
                             yield input_tensor, metadata_tensor, target_value
 
